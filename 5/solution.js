@@ -27,4 +27,23 @@ function react(polymer) {
   return polymer
 }
 
-console.log(`Part 1 solution: ${react(input).length}`)
+// console.log(`Part 1 solution: ${react(input).length}`)
+
+// Part 2
+let lengthPerLetter = {}
+
+for (let i = 65; i <= 90; i++) {
+  let data = input
+  // remove all instances of letter (capital and lowercase)
+  let cap = String.fromCharCode(i)
+  let low = String.fromCharCode(i + 32)
+  while (data.indexOf(cap) !== -1) {
+    data = data.slice(0, data.indexOf(cap)) + data.slice(data.indexOf(cap) + 1)
+  }
+  while (data.indexOf(low) !== -1) {
+    data = data.slice(0, data.indexOf(low)) + data.slice(data.indexOf(low) + 1)
+  }
+  lengthPerLetter[i] = react(data).length
+}
+
+console.log(lengthPerLetter)
