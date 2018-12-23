@@ -17,12 +17,16 @@ logData = logData.map(arr => [...arr[0].split(' '), arr[1]])
 logData = logData.map(arr => [arr[0].slice(5), arr[1], arr[2]])
 logData = logData.map(arr => [...arr[0].split('-'), arr[1], arr[2]])
 // remove text other than guard ID for "Guard #id begins shift"
-logData = logData.map(arr => [arr[0], arr[1], arr[2], arr[3].match(/(\d)+/) ? arr[3].match(/(\d)+/)[0] : arr[3]])
+logData = logData.map(arr => ({
+  month: parseInt(arr[0]),
+  day: parseInt(arr[1]),
+  time: arr[2].split(':'),
+  action: arr[3].match(/(\d)+/) ? arr[3].match(/(\d)+/)[0] : arr[3]
+}))
+
 // change times to number of minutes past midnight, or negative for before midnight
-logData = logData.map(arr => {
-  let month = parseInt(arr[0])
-  let day = parseInt(arr[1])
-  let time = arr[2].split(':')
+logData = logData.map(obj => {
+  let { month, day, time, action } = obj
   let min
   if (time[0] === '00') min = parseInt(time[1])
   if (time[0] === '23') {
@@ -39,52 +43,127 @@ logData = logData.map(arr => {
     }
     else day++
   }
-  return [month, day, min, arr[3]]
+  return { month, day, min, action }
 })
 
 function sortByDate(a, b) {
-  if (parseInt(a[0]) > parseInt(b[0])) return 1
-  else if (parseInt(a[0]) < parseInt(b[0])) return -1
+  if (a.month > b.month) return 1
+  else if (a.month < b.month) return -1
   // month must be equal, so check day
-  else if (parseInt(a[1]) > parseInt(b[1])) return 1
-  else if (parseInt(a[1]) < parseInt(b[1])) return -1
-  // both month and day must be equal, so check hour
-  else if (a[2] > b[2]) return 1
-  else if (a[2] < b[2]) return -1
+  else if (a.day > b.day) return 1
+  else if (a.day < b.day) return -1
+  // both month and day must be equal, so check min
+  else if (a.min > b.min) return 1
+  else if (a.min < b.min) return -1
   else return 0
 }
 
 logData.sort(sortByDate)
-// console.log(logData)
-
-// don't know if these are useful
-let shiftStarts = logData.filter(el => el[3].match(/(\d)+/))
-let sleepTimes = logData.filter(el => el[3] === 'falls asleep')
-let wakeTimes = logData.filter(el => el[3] === 'wakes up')
 
 let sleeper = ''
 let sleepTime = 0
 let sleepLength = 0
-let maxSleepLength = 0
-let maxSleeper = ''
-
-// this isn't right, it doesn't take into acct multiple sleeps in one shift
+let sleeps = {}
 
 for (let i = 0; i < logData.length; i++) {
-  if (logData[i][3].match(/(\d)+/)) {
-    sleeper = logData[i][3]
+  if (logData[i].action.match(/(\d)+/)) {
+    sleeper = logData[i].action
   }
-  else if (logData[i][3] === 'falls asleep') {
-    sleepTime = logData[i][2]
+  else if (logData[i].action === 'falls asleep') {
+    sleepTime = logData[i].min
   }
-  else if (logData[i][3] === 'wakes up') {
-    sleepLength = logData[i][2] - sleepTime
-    if (sleepLength > maxSleepLength) {
-      maxSleepLength = sleepLength
-      maxSleeper = sleeper
+  else if (logData[i].action === 'wakes up') {
+    sleepLength = logData[i].min - sleepTime
+    sleeps[sleeper] = (sleeps[sleeper] || 0) + sleepLength
+  }
+}
+
+let maxMinAsleep = Math.max(...Object.values(sleeps))
+let maxSleeper = Object.keys(sleeps).find(key => sleeps[key] === maxMinAsleep)
+
+// which minute does maxSleeper spend asleep the most?
+
+// make array of all sleep/wake records for maxSleeper
+let maxSleeperRecords = []
+let maxSleeperFound = false
+
+for (let i = 0; i < logData.length; i++) {
+  if (logData[i].action === maxSleeper) {
+    maxSleeperFound = true
+  }
+  else if (maxSleeperFound && logData[i].action.match(/(\d)+/)) {
+    maxSleeperFound = false
+  }
+  else if (maxSleeperFound) {
+    maxSleeperRecords.push(logData[i])
+  }
+}
+
+// make array of each minute and how many times guard was asleep during it
+let counters = []
+
+for (let m = 0; m < 60; m++) {
+  counters[m] = 0
+  for (let i = 0; i < maxSleeperRecords.length; i += 2) {
+    if (m >= maxSleeperRecords[i].min && m < maxSleeperRecords[i + 1].min) {
+      counters[m]++
     }
   }
 }
 
-console.log(maxSleepLength)
-console.log(maxSleeper)
+console.log(`Part 1 solution: ${counters.indexOf(Math.max(...counters)) * maxSleeper}`)
+
+// Part 2
+
+// make list of all guards
+let guards = []
+logData.filter(el => el.action.match(/(\d)+/)).forEach(el => {
+  if (!guards.includes(el.action)) {
+    guards.push(el.action)
+  }
+})
+
+// make object with all sleep/wake records for each guard
+let guardRecords = {}
+let guardFound = false
+
+for (let i = 0; i < guards.length; i++) {
+  if (!guardRecords[guards[i]]) { guardRecords[guards[i]] = [] }
+  for (let j = 0; j < logData.length; j++) {
+    if (logData[j].action === guards[i]) {
+      guardFound = true
+    }
+    else if (guardFound && logData[j].action.match(/(\d)+/)) {
+      guardFound = false
+    }
+    else if (guardFound) {
+      guardRecords[guards[i]].push(logData[j])
+    }
+  }
+}
+
+// for each guard, make array of each minute and how many times guard was asleep during it
+let guardCounters = {}
+let maxTimesAsleep = 0
+let maxMinute, maxGuard
+
+for (let i = 0; i < guards.length; i++) {
+  guardCounters[guards[i]] = []
+
+  for (let m = 0; m < 60; m++) {
+    guardCounters[guards[i]][m] = 0
+    for (let j = 0; j < guardRecords[guards[i]].length; j += 2) {
+      if (m >= guardRecords[guards[i]][j].min && m < guardRecords[guards[i]][j + 1].min) {
+        guardCounters[guards[i]][m]++
+      }
+    }
+  }
+  let maxTimesForThisGuard = Math.max(...guardCounters[guards[i]])
+  if (maxTimesForThisGuard > maxTimesAsleep) {
+    maxTimesAsleep = maxTimesForThisGuard
+    maxMinute = guardCounters[guards[i]].indexOf(maxTimesForThisGuard)
+    maxGuard = guards[i]
+  }
+}
+
+console.log(`Part 2 solution: ${maxMinute * maxGuard}`)
